@@ -31,6 +31,7 @@ extern crate embedded_hal as hal;
 extern crate nb;
 pub extern crate tm4c123x;
 
+pub mod fpu;
 pub mod delay;
 // pub mod flash;
 pub mod gpio;
