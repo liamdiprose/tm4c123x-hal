@@ -293,6 +293,10 @@ pub enum Domain {
     WideTimer1,
     /// 64/32-bit Timer 0
     WideTimer0,
+    /// PWM Module 1
+    Pwm1,
+    /// PWM Module 0
+    Pwm0,
 }
 
 #[derive(Copy, Clone)]
@@ -496,6 +500,8 @@ pub fn reset(_lock: &PowerControl, pd: Domain) {
             bb::toggle_bit(&p.srwtimer, 0);
             bb::spin_bit(&p.prwtimer, 0);
         },
+        Domain::Pwm1 => unimplemented!(),
+        Domain::Pwm0 => unimplemented!()
     }
 }
 
@@ -571,6 +577,8 @@ fn control_run_power(pd: Domain, on: bool) {
         Domain::WideTimer2 => unsafe { bb::change_bit(&p.rcgcwtimer, 2, on) },
         Domain::WideTimer1 => unsafe { bb::change_bit(&p.rcgcwtimer, 1, on) },
         Domain::WideTimer0 => unsafe { bb::change_bit(&p.rcgcwtimer, 0, on) },
+        Domain::Pwm1 => unimplemented!(),
+        Domain::Pwm0 => unimplemented!(),
     }
 }
 
@@ -622,6 +630,8 @@ fn control_sleep_power(pd: Domain, on: bool) {
         Domain::WideTimer2 => unsafe { bb::change_bit(&p.scgcwtimer, 2, on) },
         Domain::WideTimer1 => unsafe { bb::change_bit(&p.scgcwtimer, 1, on) },
         Domain::WideTimer0 => unsafe { bb::change_bit(&p.scgcwtimer, 0, on) },
+        Domain::Pwm1 => unimplemented!(),
+        Domain::Pwm0 => unimplemented!(),
     }
 }
 
@@ -673,6 +683,8 @@ fn control_deep_sleep_power(pd: Domain, on: bool) {
         Domain::WideTimer2 => unsafe { bb::change_bit(&p.dcgcwtimer, 2, on) },
         Domain::WideTimer1 => unsafe { bb::change_bit(&p.dcgcwtimer, 1, on) },
         Domain::WideTimer0 => unsafe { bb::change_bit(&p.dcgcwtimer, 0, on) },
+        Domain::Pwm1 => unimplemented!(),
+        Domain::Pwm0 => unimplemented!(),
     }
 }
 

@@ -41,5 +41,6 @@ pub mod serial;
 pub mod sysctl;
 pub mod time;
 pub mod bb;
+pub mod pwm;
 
 pub use tm4c123x::*;
