@@ -4,7 +4,7 @@
 #![feature(extern_prelude)]
 use ::core::u32;
 use hal;
-use tm4c123x::pwm1::RegisterBlock;
+use tm4c123x;
 use sysctl;
 
 use tm4c123x::{PWM0,PWM1};
@@ -20,19 +20,25 @@ pub struct Pwm<MODULE,GENERATOR,CHANNEL> {
     channel: CHANNEL
 }
 
-pub trait Module {}
-impl Module for PWM0 {}
-impl Module for PWM1 {}
+pub trait Module {
+    type RegisterBlock;
+}
+impl Module for PWM0 {
+    type RegisterBlock = pwm0::RegisterBlock;
+}
+impl Module for PWM1 {
+    type RegisterBlock = pwm1::RegisterBlock;
+}
 
 pub mod generator {
-    pub struct _0;
-    pub struct _1;
-    pub struct _2;
-    pub struct _3;
+    pub struct G0;
+    pub struct G1;
+    pub struct G2;
+    pub struct G3;
+
 }
 
 // FIXME:? Move generators into PWM module impl's?
-
 /// The different stages that can trigger an action in the PWM module
 pub enum Comparer {
     A(CountDirection),
@@ -48,18 +54,17 @@ pub enum CountDirection {
 }
 
 /// A PWM Generator
-pub trait Generator {
-    fn turn_on(p: &RegisterBlock);
-    fn set_action(p: &RegisterBlock, comparer: Comparer, action: PwmTimerAction);
-    fn enable_output(p: &RegisterBlock);
+pub trait Generator<Module> {
+    fn turn_on(p: &Module::RegisterBlock);
+    fn set_action(p: &Module::RegisterBlock, comparer: Comparer, action: PwmTimerAction);
+    fn enable_output(p: &Module::RegisterBlock);
 }
 
-impl Generator for generator::_0 {
-    fn turn_on(p: &RegisterBlock) {
-//        p._2_
+impl Generator for Module {
+    fn turn_on(p: &Module::RegisterBlock) {
     }
 
-    fn set_action(p: &RegisterBlock, comparer: Comparer, action: PwmTimerAction) {
+    fn set_action(p: &Module::RegisterBlock, comparer: Comparer, action: PwmTimerAction) {
         match comparer {
             Comparer::A(direction) => match direction {
                 CountDirection::Up => { p._0_actcmpau.bits(action as u8)},
@@ -74,8 +79,9 @@ impl Generator for generator::_0 {
         }
     }
 
-    fn enable_output(p: &RegisterBlock) {
-        p._0_ctl.bits(0x01);
+    fn enable_output(p: &Module::RegisterBlock) {
+        const ENABLE: u8 = 0x01;
+        p._0_ctl.bits(ENABLE);
     }
 }
 //impl Generator for generator::_1 {}
