@@ -1,13 +1,13 @@
 //! Pulse Width Modulation
-//! 
-//! An initial implementation of embedded-hal's PwmPin trait 
+//!
+//! An initial implementation of embedded-hal's PwmPin trait
 #![feature(extern_prelude)]
 use ::core::u32;
 use hal;
-use tm4c123x;
+use tm4c123x::pwm1::RegisterBlock;
 use sysctl;
 
-use tm4c123x::{PWM1}; // TODO: PWM0
+use tm4c123x::{PWM0,PWM1};
 use gpio::gpiof::{PF1};
 use gpio::{AlternateFunction, AF5, PushPull, OutputMode};  // FIXME: PushPull?
 
@@ -20,20 +20,80 @@ pub struct Pwm<MODULE,GENERATOR,CHANNEL> {
     channel: CHANNEL
 }
 
-pub enum Generator {
-    _0,
-    _1,
-    _2
+pub trait Module {}
+impl Module for PWM0 {}
+impl Module for PWM1 {}
+
+pub mod generator {
+    pub struct _0;
+    pub struct _1;
+    pub struct _2;
+    pub struct _3;
 }
 
-pub enum Channel {
-    A,
-    B
+// FIXME:? Move generators into PWM module impl's?
+
+/// The different stages that can trigger an action in the PWM module
+pub enum Comparer {
+    A(CountDirection),
+    B(CountDirection),
+    Zero,
+    Load
 }
 
-// FIXME:? Differenciate a PWM from module + generator + channel?
+/// Count direction for a generator action
+pub enum CountDirection {
+    Up,
+    Down
+}
+
+/// A PWM Generator
+pub trait Generator {
+    fn turn_on(p: &RegisterBlock);
+    fn set_action(p: &RegisterBlock, comparer: Comparer, action: PwmTimerAction);
+    fn enable_output(p: &RegisterBlock);
+}
+
+impl Generator for generator::_0 {
+    fn turn_on(p: &RegisterBlock) {
+//        p._2_
+    }
+
+    fn set_action(p: &RegisterBlock, comparer: Comparer, action: PwmTimerAction) {
+        match comparer {
+            Comparer::A(direction) => match direction {
+                CountDirection::Up => { p._0_actcmpau.bits(action as u8)},
+                CountDirection::Down => { p._0_actcmpad.bits(action as u8)},
+            },
+            Comparer::B(direction) => match direction {
+                CountDirection::Up => { p._0_actcmpau.bits(action as u8)},
+                CountDirection::Down => { p._0_actcmpad.bits(action as u8)},
+            },
+            Comparer::Zero => { p._0_actzero.bits(action as u8)},
+            Comparer::Load => { p._0_actload.bits(action as u8)},
+        }
+    }
+
+    fn enable_output(p: &RegisterBlock) {
+        p._0_ctl.bits(0x01);
+    }
+}
+//impl Generator for generator::_1 {}
+//impl Generator for generator::_2 {}
+//impl Generator for generator::_3 {}
+
+// FIXME:? Move channels into generator impls?
+pub mod channel {
+    pub struct A;
+    pub struct B;
+}
+
+pub trait Channel {}
+impl Channel for channel::A {}
+impl Channel for channel::B {}
+
 // FIXME: Come up with a better name for XPwmPin
-unsafe impl<T> XPwmPin<PWM1, Generator::_1, Channel::B> for PF1<AlternateFunction<AF5, PushPull>> where T: OutputMode {}
+unsafe impl<T> XPwmPin<PWM1, generator::_1, channel::B> for PF1<AlternateFunction<AF5, PushPull>> where T: OutputMode {}
 
 
 #[repr(u8)]
@@ -49,36 +109,42 @@ enum PwmTimerAction {
 }
 
 pub trait PwmExt {
-    fn pwm<M, G, C>(
+//    General Case --commented--
+    fn pwm<P, M, G, C>(
+        pin: P,
+        module: M,
+        generator: G,
+        channel: C,
         ss: &mut sysctl::PowerControl,
-    ) -> Pwm<M, G, C> {
-       let p = unsafe {&(*tm4c123x::PWM1::ptr())};
+    ) -> Pwm<M, G, C> where P: XPwmPin<M, G, C>, M: Module, G: Generator, C: Channel {
 
-        p._2_gena.write(|w| {
-            w.actcmpad().bits(PwmTimerAction::DriveHigh);
-            w.actzero.bits(PwmTimerAction::DriveLow);
-        });
+       let p = unsafe {&(*M::ptr())};
 
+        G::set_action(p, Comparer::A(CountDirection::Down),PwmTimerAction::DriveHigh);
+        G::set_action(p, Comparer::Zero, PwmTimerAction::DriveHigh);
+
+//        p._2_gena.write(|w| {
+//            w.actcmpad().bits(PwmTimerAction::DriveHigh);
+//            w.actzero.bits(PwmTimerAction::DriveLow);
+//        });
+
+        G::set_load(p, 0xFFF);
         // TODO: Calculate PWM timer period (aka frequency) using sysctl clock speed and pwm clock division
         unsafe {p._2_load.write(|w| w.bits(0xFFF));};
 
-        // Set value of comparer A
+        G::set_comparer_value(p, Comparer::A, 0x0F);
         // TODO: Calculate comparer based on starting duty cycle
-        unsafe {p._2_cmpa.bits(0x0F);};
+//        unsafe {p._2_cmpa.bits(0x0F);};
 
         unsafe { p._2_ctl.write(|w| w.enable() )};
 
-        Pwm {
-            module: M,
-            generator: G,
-            channel: C
-        }
+        Pwm {module, generator, channel}
     }
 }
 
 
 
-impl hal::PwmPin for Pwm<PF1> {
+impl hal::PwmPin for Pwm<PWM1, generator::_1, channel::B> {
     type Duty = u32;
 
     fn enable(&self) {
