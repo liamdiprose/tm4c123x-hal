@@ -10,7 +10,7 @@ use sysctl;
 
 use tm4c123x::{PWM0,PWM1};
 use gpio::gpiof::{PF1};
-use gpio::{AlternateFunction, AF5, PushPull};  // FIXME: PushPull?
+use gpio::{AlternateFunction, AF5, AF4,PushPull};  // FIXME: PushPull?
 
 use core::marker::PhantomData;
 use core::mem;
@@ -56,6 +56,7 @@ impl<M,G,C> Pwm<M, G, C> where C: Channel, G: Generator, M: Module {
     }
 }
 
+pub type M1PWM5 = Pwm<PWM1, Generator1, ChannelB>;
 //struct M1PWM5;
 
 pub enum Comparer {
@@ -111,7 +112,9 @@ impl Generator for Generator1 {
 
 /// A PMM Output Channel
 pub trait Channel {}
+pub struct ChannelA;
 pub struct ChannelB;
+impl Channel for ChannelA {}
 impl Channel for ChannelB {}
 
 // TODO: When trait alias's are a thing:
@@ -141,6 +144,7 @@ pub enum GeneratorAction {
 pub trait PwmExt {
     /// Create a PWM Pin
     fn pwm<PIN, GEN, CHAN>(
+        self,
         pc: &sysctl::PowerControl,
         _pin: PIN
     ) -> Pwm<Self, GEN, CHAN> where PIN: OutputPin<Self, GEN, CHAN>, GEN: Generator, CHAN: Channel, Self: Module {
