@@ -56,20 +56,25 @@ impl<M,G,C> Pwm<M, G, C> where C: Channel, G: Generator, M: Module {
     }
 }
 
-
-
 //struct M1PWM5;
+
+pub enum Comparer {
+    A,
+    B
+}
 
 //pub type M1PWM5 = Pwm<PWM0, Generator1, ChannelB>;
 /// A PWM Generator Block
 pub trait Generator {
-    fn enable();
+    fn enable(pwm: &tm4c123x::pwm0::RegisterBlock);
     fn set_action(pwm: &tm4c123x::pwm0::RegisterBlock, event: CountEvent, action: GeneratorAction);
+    fn set_load(pwm: &tm4c123x::pwm0::RegisterBlock, value: u32);
+    fn set_compare(pwm: &tm4c123x::pwm0::RegisterBlock, comparer: Comparer, value: u32);
 }
 pub struct Generator1;
 impl Generator for Generator1 {
-    fn enable () {
-        unimplemented!()
+    fn enable (pwm: &tm4c123x::pwm0::RegisterBlock) {
+        unsafe {pwm._1_ctl.write(|w| w.bits(0x01))}
     }
 
     fn set_action(pwm: &tm4c123x::pwm0::RegisterBlock, event: CountEvent, action: GeneratorAction) {
@@ -89,6 +94,17 @@ impl Generator for Generator1 {
             },
             CountEvent::Load => gen_register.write(|w| w.actload().bits(action as u8)),
             CountEvent::Zero => gen_register.write(|w| w.actzero().bits(action as u8))
+        }
+    }
+    fn set_load(pwm: &tm4c123x::pwm0::RegisterBlock, value: u32) {
+        unsafe {pwm._1_load.write(|w| w.bits(value))}
+    }
+
+    fn set_compare(pwm: &tm4c123x::pwm0::RegisterBlock, comparer: Comparer, value: u32) {
+        match comparer {
+            Comparer::A => unsafe {pwm._1_cmpa.write(|w| w.bits(value))}
+            Comparer::B => unsafe {pwm._1_cmpb.write(|w| w.bits(value))}
+
         }
     }
 }
@@ -119,7 +135,7 @@ pub enum GeneratorAction {
     DoNothing = 0x00,
     DriveHigh = 0x01,
     DriveLow = 0x02,
-    Toggle = 0x04
+    Invert = 0x04
 }
 /// Create PwmExt trait
 pub trait PwmExt {
@@ -133,6 +149,9 @@ pub trait PwmExt {
         let pwm = unsafe { &(*Self::ptr()) };
         GEN::set_action(pwm, CountEvent::CompareA(CountDirection::Up), GeneratorAction::DriveHigh);
         GEN::set_action(pwm, CountEvent::Zero, GeneratorAction::DriveLow);
+        GEN::set_load(pwm, 0xFFF);
+        GEN::set_compare(pwm, Comparer::A, 0xFF);
+        GEN::enable(pwm);
 
         Pwm::new()
     }
