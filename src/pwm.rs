@@ -64,7 +64,7 @@ impl<M,G,C> Pwm<M, G, C> where C: Channel, G: Generator, M: Module {
 /// A PWM Generator Block
 pub trait Generator {
     fn enable();
-    fn set_action(pwm: tm4c123x::pwm0::RegisterBlock, event: CountEvent, action: GeneratorAction);
+    fn set_action(pwm: &tm4c123x::pwm0::RegisterBlock, event: CountEvent, action: GeneratorAction);
 }
 pub struct Generator1;
 impl Generator for Generator1 {
@@ -72,23 +72,24 @@ impl Generator for Generator1 {
         unimplemented!()
     }
 
-    fn set_action(pwm: tm4c123x::pwm0::RegisterBlock, event: CountEvent, action: GeneratorAction) {
-        pwm._1_gena.write(match event {
+    fn set_action(pwm: &tm4c123x::pwm0::RegisterBlock, event: CountEvent, action: GeneratorAction) {
+        let gen_register = &pwm._1_gena;
+        match event {
             CountEvent::CompareA(direction) => {
                 match direction {
-                    CountDirection::Up => |w: &mut tm4c123x::pwm0::_1_gena::W| w.actcmpau().bits(action),
-                    CountDirection::Down => |w: &mut tm4c123x::pwm0::_1_gena::W| w.actcmpad().bits(action)
+                    CountDirection::Up => gen_register.write(|w: &mut tm4c123x::pwm0::_1_gena::W| w.actcmpau().bits(action as u8)),
+                    CountDirection::Down => gen_register.write(|w: &mut tm4c123x::pwm0::_1_gena::W| w.actcmpad().bits(action as u8))
                 }
             },
             CountEvent::CompareB(direction) => {
                 match direction {
-                    CountDirection::Up => |w: &mut tm4c123x::pwm0::_1_gena::W| w.actcmpbu().bits(action),
-                    CountDirection::Down => |w:&mut tm4c123x::pwm0::_1_gena::W| w.actcmpbd().bits(action)
+                    CountDirection::Up => gen_register.write(|w: &mut tm4c123x::pwm0::_1_gena::W| w.actcmpbu().bits(action as u8)),
+                    CountDirection::Down => gen_register.write(|w:&mut tm4c123x::pwm0::_1_gena::W| w.actcmpbd().bits(action as u8))
                 }
             },
-            CountEvent::Load => |w| w.actload().bits(action),
-            CountEvent::Zero => |w| w.actzero().bits(action)
-        })
+            CountEvent::Load => gen_register.write(|w| w.actload().bits(action as u8)),
+            CountEvent::Zero => gen_register.write(|w| w.actzero().bits(action as u8))
+        }
     }
 }
 
@@ -102,20 +103,19 @@ impl Channel for ChannelB {}
 impl OutputPin<PWM1, Generator1, ChannelB> for PF1<AlternateFunction<AF5, PushPull>>{}
 
 
-enum CountDirection {
+pub enum CountDirection {
     Up,
     Down
 }
 
-enum CountEvent {
+pub enum CountEvent {
     CompareA(CountDirection),
     CompareB(CountDirection),
     Load,
     Zero
 }
 
-#[repr(u8)]
-enum GeneratorAction {
+pub enum GeneratorAction {
     DoNothing = 0x00,
     DriveHigh = 0x01,
     DriveLow = 0x02,
@@ -126,11 +126,11 @@ pub trait PwmExt {
     /// Create a PWM Pin
     fn pwm<PIN, GEN, CHAN>(
         pc: &sysctl::PowerControl,
-        pin: PIN
+        _pin: PIN
     ) -> Pwm<Self, GEN, CHAN> where PIN: OutputPin<Self, GEN, CHAN>, GEN: Generator, CHAN: Channel, Self: Module {
 
         Self::power_on(pc);
-        let &pwm = unsafe { &(*Self::ptr()) };
+        let pwm = unsafe { &(*Self::ptr()) };
         GEN::set_action(pwm, CountEvent::CompareA(CountDirection::Up), GeneratorAction::DriveHigh);
         GEN::set_action(pwm, CountEvent::Zero, GeneratorAction::DriveLow);
 
