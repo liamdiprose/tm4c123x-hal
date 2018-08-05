@@ -80,11 +80,28 @@ impl Generator for Generator2 {
         pwm.enable.write(|w| w.pwm5en().set_bit());
     }
 
-    fn set_action(pwm: &tm4c123x::pwm0::RegisterBlock, event: CountEvent, action: GeneratorAction) {
-        // FIXME: Move to Channel trait
-        let gena_register = &pwm._2_genb;
-        let genb_register = &pwm._2_genb;
+    fn set_load(pwm: &tm4c123x::pwm0::RegisterBlock, value: u32) {
+        unsafe {pwm._2_load.write(|w| w.bits(value))}
+    }
+
+    fn set_compare(pwm: &tm4c123x::pwm0::RegisterBlock, comparer: Comparer, value: u16) {
+        match comparer {
+            Comparer::A => unsafe {pwm._2_cmpa.write(|w| w.compa().bits(value) )}
+            Comparer::B => unsafe {pwm._2_cmpb.write(|w| w.compb().bits(value))}
+        }
+    }
+}
+
+/// A PMM Output Channel
+pub trait Channel {
+    fn disable(pwm: &tm4c123x::pwm0::RegisterBlock) {
         unsafe {pwm._2_ctl.write(|w| w.bits(0) );};
+    }
+
+    fn set_action(pwm: &tm4c123x::pwm0::RegisterBlock, event: CountEvent, action: GeneratorAction) {
+        // FIXME: Get gen from generator
+        let gena_register = &pwm._2_gena;
+        let genb_register = &pwm._2_genb;
         match event {
             CountEvent::CompareA(direction) => {
                 match direction {
@@ -102,28 +119,15 @@ impl Generator for Generator2 {
             CountEvent::Zero => gena_register.modify(|_, w| w.actzero().bits(action as u8))
         }
     }
-    fn set_load(pwm: &tm4c123x::pwm0::RegisterBlock, value: u32) {
-        unsafe {pwm._2_load.write(|w| w.bits(value))}
-    }
-
-    fn set_compare(pwm: &tm4c123x::pwm0::RegisterBlock, comparer: Comparer, value: u16) {
-        match comparer {
-            Comparer::A => unsafe {pwm._2_cmpa.write(|w| w.compa().bits(value) )}
-            Comparer::B => unsafe {pwm._2_cmpb.write(|w| w.compb().bits(value))}
-        }
-    }
 }
-
-/// A PMM Output Channel
-pub trait Channel {}
 pub struct ChannelA;
 pub struct ChannelB;
 impl Channel for ChannelA {}
 impl Channel for ChannelB {}
 
-// TODO: When trait alias's are a thing:
-//trait M1PWM5 = OutputPin<PWM1, Generator1, ChannelB>
 impl OutputPin<PWM1, Generator2, ChannelB> for PF1<AlternateFunction<AF5, PushPull>>{}
+impl OutputPin<PWM1, Generator3, ChannelA> for PF2<AlternateFunction<AF5, PushPull>>{}
+impl OutputPin<PWM1, Generator3, ChannelB> for PF3<AlternateFunction<AF5, PushPull>>{}
 
 
 pub enum CountDirection {
