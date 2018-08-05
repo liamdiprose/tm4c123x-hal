@@ -10,7 +10,7 @@ use sysctl;
 
 use tm4c123x::{PWM0,PWM1};
 use gpio::gpiof::{PF1};
-use gpio::{AlternateFunction, AF5, AF4,PushPull};  // FIXME: PushPull?
+use gpio::{AlternateFunction, AF5, PushPull};  // FIXME: PushPull?
 
 use core::marker::PhantomData;
 use core::mem;
@@ -26,7 +26,7 @@ pub trait Module: Sized {
                               Self::POWER_DOMAIN,
                               sysctl::RunMode::Run,
                               sysctl::PowerState::On);
-        sysctl::reset(pc, Self::POWER_DOMAIN);
+//        sysctl::reset(pc, Self::POWER_DOMAIN);
     }
     unsafe fn ptr() -> *const tm4c123x::pwm0::RegisterBlock;
 }
@@ -56,9 +56,10 @@ impl<M,G,C> Pwm<M, G, C> where C: Channel, G: Generator, M: Module {
     }
 }
 
-pub type M1PWM5 = Pwm<PWM1, Generator1, ChannelB>;
+pub type M1PWM5 = Pwm<PWM1, Generator2, ChannelB>;
 //struct M1PWM5;
 
+// FIXME: Rename to 'comparitor'
 pub enum Comparer {
     A,
     B
@@ -70,42 +71,45 @@ pub trait Generator {
     fn enable(pwm: &tm4c123x::pwm0::RegisterBlock);
     fn set_action(pwm: &tm4c123x::pwm0::RegisterBlock, event: CountEvent, action: GeneratorAction);
     fn set_load(pwm: &tm4c123x::pwm0::RegisterBlock, value: u32);
-    fn set_compare(pwm: &tm4c123x::pwm0::RegisterBlock, comparer: Comparer, value: u32);
+    fn set_compare(pwm: &tm4c123x::pwm0::RegisterBlock, comparer: Comparer, value: u16);
 }
-pub struct Generator1;
-impl Generator for Generator1 {
+pub struct Generator2;
+impl Generator for Generator2 {
     fn enable (pwm: &tm4c123x::pwm0::RegisterBlock) {
-        unsafe {pwm._1_ctl.write(|w| w.bits(0x01))}
+        pwm._2_ctl.write(|w| w.enable().set_bit());
+        pwm.enable.write(|w| w.pwm5en().set_bit());
     }
 
     fn set_action(pwm: &tm4c123x::pwm0::RegisterBlock, event: CountEvent, action: GeneratorAction) {
-        let gen_register = &pwm._1_gena;
+        // FIXME: Move to Channel trait
+        let gena_register = &pwm._2_genb;
+        let genb_register = &pwm._2_genb;
+        unsafe {pwm._2_ctl.write(|w| w.bits(0) );};
         match event {
             CountEvent::CompareA(direction) => {
                 match direction {
-                    CountDirection::Up => gen_register.write(|w: &mut tm4c123x::pwm0::_1_gena::W| w.actcmpau().bits(action as u8)),
-                    CountDirection::Down => gen_register.write(|w: &mut tm4c123x::pwm0::_1_gena::W| w.actcmpad().bits(action as u8))
+                    CountDirection::Up => gena_register.modify(|_, w| w.actcmpau().bits(action as u8)),
+                    CountDirection::Down => gena_register.modify(|_, w| w.actcmpad().bits(action as u8))
                 }
             },
             CountEvent::CompareB(direction) => {
                 match direction {
-                    CountDirection::Up => gen_register.write(|w: &mut tm4c123x::pwm0::_1_gena::W| w.actcmpbu().bits(action as u8)),
-                    CountDirection::Down => gen_register.write(|w:&mut tm4c123x::pwm0::_1_gena::W| w.actcmpbd().bits(action as u8))
+                    CountDirection::Up => genb_register.modify(|_, w| w.actcmpbu().bits(action as u8)),
+                    CountDirection::Down => genb_register.modify(|_, w| w.actcmpbd().bits(action as u8))
                 }
             },
-            CountEvent::Load => gen_register.write(|w| w.actload().bits(action as u8)),
-            CountEvent::Zero => gen_register.write(|w| w.actzero().bits(action as u8))
+            CountEvent::Load => gena_register.modify(|_, w| w.actload().bits(action as u8)),
+            CountEvent::Zero => gena_register.modify(|_, w| w.actzero().bits(action as u8))
         }
     }
     fn set_load(pwm: &tm4c123x::pwm0::RegisterBlock, value: u32) {
-        unsafe {pwm._1_load.write(|w| w.bits(value))}
+        unsafe {pwm._2_load.write(|w| w.bits(value))}
     }
 
-    fn set_compare(pwm: &tm4c123x::pwm0::RegisterBlock, comparer: Comparer, value: u32) {
+    fn set_compare(pwm: &tm4c123x::pwm0::RegisterBlock, comparer: Comparer, value: u16) {
         match comparer {
-            Comparer::A => unsafe {pwm._1_cmpa.write(|w| w.bits(value))}
-            Comparer::B => unsafe {pwm._1_cmpb.write(|w| w.bits(value))}
-
+            Comparer::A => unsafe {pwm._2_cmpa.write(|w| w.compa().bits(value) )}
+            Comparer::B => unsafe {pwm._2_cmpb.write(|w| w.compb().bits(value))}
         }
     }
 }
@@ -119,7 +123,7 @@ impl Channel for ChannelB {}
 
 // TODO: When trait alias's are a thing:
 //trait M1PWM5 = OutputPin<PWM1, Generator1, ChannelB>
-impl OutputPin<PWM1, Generator1, ChannelB> for PF1<AlternateFunction<AF5, PushPull>>{}
+impl OutputPin<PWM1, Generator2, ChannelB> for PF1<AlternateFunction<AF5, PushPull>>{}
 
 
 pub enum CountDirection {
@@ -134,11 +138,12 @@ pub enum CountEvent {
     Zero
 }
 
+#[repr(u8)]
 pub enum GeneratorAction {
     DoNothing = 0x00,
-    DriveHigh = 0x01,
-    DriveLow = 0x02,
-    Invert = 0x04
+    Invert = 0x01,
+    DriveLow = 0x2,
+    DriveHigh = 0x03,
 }
 /// Create PwmExt trait
 pub trait PwmExt {
@@ -150,12 +155,23 @@ pub trait PwmExt {
     ) -> Pwm<Self, GEN, CHAN> where PIN: OutputPin<Self, GEN, CHAN>, GEN: Generator, CHAN: Channel, Self: Module {
 
         Self::power_on(pc);
-        let pwm = unsafe { &(*Self::ptr()) };
-        GEN::set_action(pwm, CountEvent::CompareA(CountDirection::Up), GeneratorAction::DriveHigh);
-        GEN::set_action(pwm, CountEvent::Zero, GeneratorAction::DriveLow);
-        GEN::set_load(pwm, 0xFFF);
-        GEN::set_compare(pwm, Comparer::A, 0xFF);
-        GEN::enable(pwm);
+        let pwm = unsafe { &*Self::ptr()};
+
+        // TODO: move to sysctl
+        unsafe {
+            let ss = &(*tm4c123x::SYSCTL::ptr());
+            ::bb::change_bit(&ss.rcc.write(|w| {
+                w.usepwmdiv().set_bit();
+                w.pwmdiv().bits(64)
+            }), 0, true);
+        }
+
+        GEN::set_load(&pwm, 0xFFF);
+        GEN::set_action(&pwm, CountEvent::Load, GeneratorAction::DriveLow);
+        GEN::set_action(&pwm, CountEvent::CompareA(CountDirection::Down), GeneratorAction::DriveHigh);
+
+        GEN::set_compare(&pwm, Comparer::A, 0xF);
+
 
         Pwm::new()
     }
@@ -174,6 +190,7 @@ impl<M, G, C> hal::PwmPin for Pwm<M, G, C> where M: Module, G: Generator, C: Cha
 
     fn enable(&mut self) {
 //        C::enable()
+        G::enable(unsafe {&*M::ptr()});
     }
 
     fn get_duty(&self) -> Self::Duty {
@@ -186,8 +203,8 @@ impl<M, G, C> hal::PwmPin for Pwm<M, G, C> where M: Module, G: Generator, C: Cha
         unimplemented!()
     }
 
-    fn set_duty(&mut self, _duty: Self::Duty) {
+    fn set_duty(&mut self, duty: Self::Duty) {
 //        G::set_duty(duty)
-        unimplemented!()
+        G::set_compare(unsafe {&*M::ptr()}, Comparer::A, duty);
     }
 }

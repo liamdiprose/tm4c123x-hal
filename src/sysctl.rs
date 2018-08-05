@@ -577,8 +577,8 @@ fn control_run_power(pd: Domain, on: bool) {
         Domain::WideTimer2 => unsafe { bb::change_bit(&p.rcgcwtimer, 2, on) },
         Domain::WideTimer1 => unsafe { bb::change_bit(&p.rcgcwtimer, 1, on) },
         Domain::WideTimer0 => unsafe { bb::change_bit(&p.rcgcwtimer, 0, on) },
-        Domain::Pwm1 => unimplemented!(),
-        Domain::Pwm0 => unimplemented!(),
+        Domain::Pwm1 => unsafe { bb::change_bit(&p.rcgcpwm, 1, on )},
+        Domain::Pwm0 => unsafe { bb::change_bit(&p.rcgcpwm, 0, on )}
     }
 }
 
